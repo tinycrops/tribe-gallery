@@ -4,21 +4,169 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>@thecollabagepatch — TRIBE v2 Brain Response Gallery</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
-  body { background: #0d0d0d; color: #e2e2e2; font-family: system-ui, sans-serif;
-         display: flex; align-items: center; justify-content: center;
-         min-height: 100vh; margin: 0; }
-  .msg { text-align: center; }
-  h1 { font-size: 1.3rem; margin-bottom: .75rem; }
-  p  { color: #666; font-size: .9rem; }
-  .dot { animation: pulse 1.4s infinite; display: inline-block; }
-  @keyframes pulse { 0%,100%{opacity:.2} 50%{opacity:1} }
+  :root {
+    --bg: #0d0d0d; --card: #161616; --border: #2a2a2a;
+    --accent: #7c3aed; --text: #e2e2e2; --muted: #777;
+    --hot: #ff4d4d; --cold: #4d9fff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  header { padding: 2rem; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  header p  { margin-top: .5rem; color: var(--muted); font-size: .9rem; max-width: 640px; line-height: 1.5; }
+  .explainer {
+    background: var(--card); border: 1px solid var(--border);
+    margin: 1.5rem 2rem; padding: 1.2rem 1.5rem; border-radius: 8px;
+    font-size: .88rem; line-height: 1.7; color: #b0b0b0;
+  }
+  .explainer strong { color: var(--text); }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 1.5rem; padding: 1.5rem 2rem;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  .card-header { display: flex; gap: .75rem; padding: .9rem; align-items: flex-start; }
+  .card-header img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #222; }
+  .card-meta h3 { font-size: .9rem; font-weight: 600; line-height: 1.4; }
+  .card-meta .tags { margin-top: .35rem; font-size: .75rem; color: var(--muted); }
+  .chart-wrap { padding: .5rem 1rem 1rem; }
+  .chart-label { font-size: .7rem; color: var(--muted); margin-bottom: .3rem; }
+  canvas { width: 100% !important; height: 120px !important; }
+  .top-regions { padding: 0 1rem .9rem; display: flex; flex-wrap: wrap; gap: .35rem; }
+  .region-chip {
+    font-size: .68rem; padding: .2rem .55rem; border-radius: 4px;
+    background: var(--accent); color: #fff; opacity: .85;
+  }
+  .loading { color: var(--muted); font-size: .85rem; padding: .5rem 0; }
+  footer { padding: 2rem; text-align: center; color: var(--muted); font-size: .8rem; }
 </style>
 </head>
 <body>
-<div class="msg">
+<header>
   <h1>@thecollabagepatch — TRIBE v2 Brain Response Gallery</h1>
-  <p>Pipeline running<span class="dot">…</span> data will appear here shortly.</p>
+  <p>Predicted fMRI cortical activation for the first 15 seconds of each video, using Meta's TRIBE v2 multimodal brain encoding model.</p>
+</header>
+<div class="explainer">
+  <strong>What am I looking at?</strong>
+  TRIBE v2 predicts how a brain would respond (fMRI BOLD signal) while watching each video.
+  It combines three feature extractors — <strong>V-JEPA2</strong> (video),
+  <strong>Wav2Vec-BERT</strong> (audio), <strong>LLaMA 3.2</strong> (transcribed speech) —
+  then maps those representations onto 20,484 vertices of the cortical surface (<em>fsaverage5</em>).
+  The line charts below show mean predicted activation across the <strong>Destrieux cortical atlas</strong> (76 regions per hemisphere)
+  over 15 seconds.
+  Chips show the top-5 most activated regions. Positive values = activation above resting baseline.
+  For guitar content: expect auditory cortex (STG) + visual cortex (early visual areas) to dominate.
 </div>
+<div id="grid"><p class="loading" style="padding:2rem">Loading gallery…</p></div>
+<footer>Built with TRIBE v2 · Meta AI Research · fsaverage5 Destrieux parcellation</footer>
+
+<script>
+const GRADIENT = (ctx, top, bot) => {
+  const g = ctx.createLinearGradient(0, 0, 0, 120);
+  g.addColorStop(0, top); g.addColorStop(1, bot); return g;
+};
+
+async function loadIndex() {
+  const r = await fetch('index.json'); return r.json();
+}
+async function loadData(file) {
+  const r = await fetch(file); return r.json();
+}
+
+function topRegions(activations, regions, k=5) {
+  const mean = regions.map((_, ri) => {
+    const vals = activations.map(t => t[ri]);
+    return vals.reduce((a,b) => a + Math.max(b, 0), 0) / vals.length;
+  });
+  return mean
+    .map((v, i) => [v, regions[i]])
+    .sort((a,b) => b[0]-a[0])
+    .slice(0, k)
+    .map(([,name]) => name.replace(/^_/, '').replace(/_/g, ' '));
+}
+
+function renderCard(meta, data) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  // header
+  const hdr = document.createElement('div');
+  hdr.className = 'card-header';
+  hdr.innerHTML = `
+    <img src="${meta.thumbnail}" alt="" onerror="this.style.display='none'">
+    <div class="card-meta">
+      <h3>${meta.title}</h3>
+      <div class="tags">${meta.duration ? meta.duration + 's' : ''} &nbsp;·&nbsp; ${meta.views ? meta.views.toLocaleString() + ' views' : ''} &nbsp;·&nbsp; ${meta.n_timesteps} TR predicted</div>
+    </div>`;
+  card.appendChild(hdr);
+
+  if (!data || data.error) {
+    card.innerHTML += `<p class="loading" style="padding:1rem;color:#f55">Error: ${(data||{}).error||'no data'}</p>`;
+    return card;
+  }
+
+  // mean activation over all regions per second → single line
+  const n_t = data.activations.length;
+  const globalMean = data.activations.map(t => t.reduce((a,b) => a+b,0)/t.length);
+  const labels = Array.from({length: n_t}, (_,i) => `${i}s`);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-wrap';
+  wrap.innerHTML = '<div class="chart-label">Mean cortical activation (normalised) over 15 s</div>';
+  const cv = document.createElement('canvas');
+  wrap.appendChild(cv);
+  card.appendChild(wrap);
+
+  new Chart(cv, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: globalMean,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 2,
+        borderWidth: 2,
+        borderColor: '#7c3aed',
+        backgroundColor: (ctx) => GRADIENT(ctx.chart.ctx, 'rgba(124,58,237,.35)', 'rgba(124,58,237,.02)'),
+      }]
+    },
+    options: {
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#555', font: {size: 10} }, grid: { color: '#1e1e1e' } },
+        y: { ticks: { color: '#555', font: {size: 10} }, grid: { color: '#1e1e1e' } }
+      }
+    }
+  });
+
+  // Top regions
+  const top = topRegions(data.activations, data.regions);
+  const chips = document.createElement('div');
+  chips.className = 'top-regions';
+  chips.innerHTML = top.map(r => `<span class="region-chip">${r}</span>`).join('');
+  card.appendChild(chips);
+
+  return card;
+}
+
+(async () => {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  const index = await loadIndex();
+  for (const meta of index) {
+    let data = null;
+    try { data = await loadData(meta.data_file); } catch {}
+    grid.appendChild(renderCard(meta, data));
+  }
+})();
+</script>
 </body>
 </html>
