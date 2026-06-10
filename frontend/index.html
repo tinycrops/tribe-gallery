@@ -4,12 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>@thecollabagepatch — TRIBE v2 Brain Response Gallery</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #0d0d0d; --card: #161616; --border: #2a2a2a;
-    --accent: #7c3aed; --text: #e2e2e2; --muted: #777;
-    --hot: #ff4d4d; --cold: #4d9fff;
+    --accent: #7c3aed; --text: #e2e2e2; --muted: #666;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
@@ -19,12 +17,12 @@
   .explainer {
     background: var(--card); border: 1px solid var(--border);
     margin: 1.5rem 2rem; padding: 1.2rem 1.5rem; border-radius: 8px;
-    font-size: .88rem; line-height: 1.7; color: #b0b0b0;
+    font-size: .88rem; line-height: 1.7; color: #a0a0a0;
   }
   .explainer strong { color: var(--text); }
   #grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
     gap: 1.5rem; padding: 1.5rem 2rem;
   }
   .card {
@@ -33,65 +31,144 @@
   }
   .card-header { display: flex; gap: .75rem; padding: .9rem; align-items: flex-start; }
   .card-header img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #222; }
-  .card-meta h3 { font-size: .9rem; font-weight: 600; line-height: 1.4; }
-  .card-meta .tags { margin-top: .35rem; font-size: .75rem; color: var(--muted); }
-  .chart-wrap { padding: .5rem 1rem 1rem; }
-  .chart-label { font-size: .7rem; color: var(--muted); margin-bottom: .3rem; }
-  canvas { width: 100% !important; height: 120px !important; }
-  .top-regions { padding: 0 1rem .9rem; display: flex; flex-wrap: wrap; gap: .35rem; }
-  .region-chip {
-    font-size: .68rem; padding: .2rem .55rem; border-radius: 4px;
-    background: var(--accent); color: #fff; opacity: .85;
+  .card-meta h3 { font-size: .88rem; font-weight: 600; line-height: 1.4; }
+  .card-meta .tags { margin-top: .35rem; font-size: .72rem; color: var(--muted); }
+  .heatmap-wrap { padding: .5rem 1rem 0; }
+  .heatmap-label { font-size: .68rem; color: var(--muted); margin-bottom: .4rem; }
+  canvas.heatmap { display: block; width: 100%; }
+  .legend {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .35rem 1rem .5rem; font-size: .64rem; color: #444;
   }
-  .loading { color: var(--muted); font-size: .85rem; padding: .5rem 0; }
-  footer { padding: 2rem; text-align: center; color: var(--muted); font-size: .8rem; }
+  .legend-bar {
+    flex: 1; height: 5px; border-radius: 2px;
+    background: linear-gradient(to right, #1462b8, #161616, #e07000);
+  }
+  .top-regions { padding: .3rem 1rem .9rem; display: flex; flex-wrap: wrap; gap: .3rem; }
+  .region-chip {
+    font-size: .66rem; padding: .18rem .5rem; border-radius: 3px;
+    background: #2a1f4a; color: #a88af0;
+    border: 1px solid #3d2e6e;
+  }
+  .err { color: #f55; font-size: .82rem; padding: 1rem; }
+  footer { padding: 2rem; text-align: center; color: #333; font-size: .78rem; }
+  footer a { color: #444; }
 </style>
 </head>
 <body>
 <header>
   <h1>@thecollabagepatch — TRIBE v2 Brain Response Gallery</h1>
-  <p>Predicted fMRI cortical activation for the first 15 seconds of each video, using Meta's TRIBE v2 multimodal brain encoding model.</p>
+  <p>Predicted fMRI cortical activation for the first 15 seconds of each video. Meta TRIBE v2: V-JEPA2 (video) + Wav2Vec-BERT (audio) + LLaMA 3.2 (speech) → 20,484 cortical vertices (fsaverage5).</p>
 </header>
 <div class="explainer">
-  <strong>What am I looking at?</strong>
-  TRIBE v2 predicts how a brain would respond (fMRI BOLD signal) while watching each video.
-  It combines three feature extractors — <strong>V-JEPA2</strong> (video),
-  <strong>Wav2Vec-BERT</strong> (audio), <strong>LLaMA 3.2</strong> (transcribed speech) —
-  then maps those representations onto 20,484 vertices of the cortical surface (<em>fsaverage5</em>).
-  The line charts below show mean predicted activation across the <strong>Destrieux cortical atlas</strong> (76 regions per hemisphere)
-  over 15 seconds.
-  Chips show the top-5 most activated regions. Positive values = activation above resting baseline.
-  For guitar content: expect auditory cortex (STG) + visual cortex (early visual areas) to dominate.
+  <strong>Reading the heatmap.</strong>
+  Each row is one of the top 20 most-activated <strong>Destrieux cortical regions</strong> (76 named regions mapped from the fsaverage5 surface),
+  sorted by mean activation — most active at top.
+  Columns are seconds 0–14.
+  <strong style="color:#e07000">Orange/red = activation above resting baseline.</strong>
+  <strong style="color:#4d9fff">Blue = suppression below baseline.</strong>
+  The <em>spatial pattern</em> is the signal — which areas fire (auditory cortex vs. visual cortex vs. language areas) tells you what kind of processing the content demands.
+  Chips show the top 5 activated regions by name.
 </div>
-<div id="grid"><p class="loading" style="padding:2rem">Loading gallery…</p></div>
-<footer>Built with TRIBE v2 · Meta AI Research · fsaverage5 Destrieux parcellation</footer>
+<div id="grid"><p style="padding:2rem;color:var(--muted)">Loading gallery…</p></div>
+<footer>
+  TRIBE v2 · Meta AI Research ·
+  <a href="https://github.com/facebookresearch/tribev2">github</a> ·
+  <a href="https://aidemos.atmeta.com/tribev2">interactive demo</a> ·
+  fsaverage5 Destrieux parcellation
+</footer>
 
 <script>
-const GRADIENT = (ctx, top, bot) => {
-  const g = ctx.createLinearGradient(0, 0, 0, 120);
-  g.addColorStop(0, top); g.addColorStop(1, bot); return g;
-};
-
-async function loadIndex() {
-  const r = await fetch('index.json'); return r.json();
+function heatColor(val) {
+  val = Math.max(-1, Math.min(1, val));
+  let r, g, b;
+  if (val >= 0) {
+    // dark gray → orange
+    r = Math.round(22 + val * 202);
+    g = Math.round(22 + val * 90);
+    b = Math.round(22 - val * 12);
+  } else {
+    const t = -val;
+    // dark gray → steel blue
+    r = Math.round(22 - t * 2);
+    g = Math.round(22 + t * 76);
+    b = Math.round(22 + t * 162);
+  }
+  return `rgb(${r},${g},${b})`;
 }
-async function loadData(file) {
-  const r = await fetch(file); return r.json();
+
+function renderHeatmap(cv, activations, regions) {
+  const N_SHOW = 20;
+  const n_t = activations.length;
+  const n_r = regions.length;
+
+  const means = Array.from({length: n_r}, (_, ri) =>
+    activations.reduce((s, t) => s + t[ri], 0) / n_t
+  );
+
+  const topIdx = means
+    .map((v, i) => [v, i])
+    .sort((a, b) => Math.abs(b[0]) - Math.abs(a[0]))
+    .slice(0, N_SHOW)
+    .sort((a, b) => b[0] - a[0])
+    .map(([, i]) => i);
+
+  const LEFT = 124, RIGHT = 6, TOP = 4, BOTTOM = 18;
+  const W = cv.width, H = cv.height;
+  const mapW = W - LEFT - RIGHT;
+  const mapH = H - TOP - BOTTOM;
+  const cW = mapW / n_t;
+  const cH = mapH / N_SHOW;
+
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  for (let ri = 0; ri < topIdx.length; ri++) {
+    const idx = topIdx[ri];
+    const rawName = regions[idx] || '';
+    const name = rawName.replace(/^_/, '').replace(/_/g, ' ');
+
+    for (let ti = 0; ti < n_t; ti++) {
+      ctx.fillStyle = heatColor(activations[ti][idx]);
+      ctx.fillRect(LEFT + ti * cW + 0.5, TOP + ri * cH + 0.5, cW - 1, cH - 1);
+    }
+
+    ctx.fillStyle = '#505050';
+    ctx.font = `9px system-ui`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    let label = name;
+    const maxW = LEFT - 6;
+    while (label.length > 1 && ctx.measureText(label).width > maxW) {
+      label = label.slice(0, -1);
+    }
+    if (label.length < name.length) label = label.trimEnd() + '…';
+    ctx.fillText(label, LEFT - 4, TOP + ri * cH + cH / 2);
+  }
+
+  // time axis
+  ctx.fillStyle = '#3a3a3a';
+  ctx.font = '9px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let ti = 0; ti < n_t; ti += 2) {
+    ctx.fillText(`${ti}s`, LEFT + (ti + 0.5) * cW, TOP + mapH + 3);
+  }
 }
 
-function topRegions(activations, regions, k=5) {
-  const mean = regions.map((_, ri) => {
-    const vals = activations.map(t => t[ri]);
-    return vals.reduce((a,b) => a + Math.max(b, 0), 0) / vals.length;
-  });
-  return mean
-    .map((v, i) => [v, regions[i]])
-    .sort((a,b) => b[0]-a[0])
+function topRegionNames(activations, regions, k = 5) {
+  const n_r = regions.length;
+  const means = Array.from({length: n_r}, (_, ri) =>
+    activations.reduce((s, t) => s + Math.max(t[ri], 0), 0) / activations.length
+  );
+  return means
+    .map((v, i) => [v, regions[i] || ''])
+    .sort((a, b) => b[0] - a[0])
     .slice(0, k)
-    .map(([,name]) => name.replace(/^_/, '').replace(/_/g, ' '));
+    .map(([, n]) => n.replace(/^_/, '').replace(/_/g, ' '));
 }
 
-function renderCard(meta, data) {
+function buildCard(meta, data) {
   const card = document.createElement('div');
   card.className = 'card';
 
@@ -101,71 +178,78 @@ function renderCard(meta, data) {
   hdr.innerHTML = `
     <img src="${meta.thumbnail}" alt="" onerror="this.style.display='none'">
     <div class="card-meta">
-      <h3><a href="https://www.tiktok.com/@thecollabagepatch/video/${meta.post_id}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px solid #3a3a3a">${meta.title}</a></h3>
-      <div class="tags">${meta.duration ? meta.duration + 's' : ''} &nbsp;·&nbsp; ${meta.views ? meta.views.toLocaleString() + ' views' : ''} &nbsp;·&nbsp; ${meta.n_timesteps} TR predicted</div>
+      <h3><a href="https://www.tiktok.com/@thecollabagepatch/video/${meta.post_id}"
+             target="_blank" rel="noopener"
+             style="color:inherit;text-decoration:none;border-bottom:1px solid #2e2e2e">${meta.title}</a></h3>
+      <div class="tags">${meta.duration ?? ''}s &nbsp;·&nbsp; ${(meta.views ?? 0).toLocaleString()} views &nbsp;·&nbsp; ${meta.n_timesteps} TRs</div>
     </div>`;
   card.appendChild(hdr);
 
   if (!data || data.error) {
-    card.innerHTML += `<p class="loading" style="padding:1rem;color:#f55">Error: ${(data||{}).error||'no data'}</p>`;
-    return card;
+    const e = document.createElement('p');
+    e.className = 'err';
+    e.textContent = 'Error: ' + ((data || {}).error || 'no data');
+    card.appendChild(e);
+    return { card, cv: null };
   }
 
-  // mean activation over all regions per second → single line
-  const n_t = data.activations.length;
-  const globalMean = data.activations.map(t => t.reduce((a,b) => a+b,0)/t.length);
-  const labels = Array.from({length: n_t}, (_,i) => `${i}s`);
-
+  // heatmap area
   const wrap = document.createElement('div');
-  wrap.className = 'chart-wrap';
-  wrap.innerHTML = '<div class="chart-label">Mean cortical activation (normalised) over 15 s</div>';
+  wrap.className = 'heatmap-wrap';
+  const lbl = document.createElement('div');
+  lbl.className = 'heatmap-label';
+  lbl.textContent = 'Top 20 Destrieux regions × 15 s — sorted by activation';
+  wrap.appendChild(lbl);
+
   const cv = document.createElement('canvas');
+  cv.className = 'heatmap';
   wrap.appendChild(cv);
   card.appendChild(wrap);
 
-  new Chart(cv, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data: globalMean,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 2,
-        borderWidth: 2,
-        borderColor: '#7c3aed',
-        backgroundColor: (ctx) => GRADIENT(ctx.chart.ctx, 'rgba(124,58,237,.35)', 'rgba(124,58,237,.02)'),
-      }]
-    },
-    options: {
-      animation: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: '#555', font: {size: 10} }, grid: { color: '#1e1e1e' } },
-        y: { ticks: { color: '#555', font: {size: 10} }, grid: { color: '#1e1e1e' } }
-      }
-    }
-  });
+  // legend
+  const leg = document.createElement('div');
+  leg.className = 'legend';
+  leg.innerHTML = '<span>suppressed</span><div class="legend-bar"></div><span>activated</span>';
+  card.appendChild(leg);
 
-  // Top regions
-  const top = topRegions(data.activations, data.regions);
+  // region chips
   const chips = document.createElement('div');
   chips.className = 'top-regions';
-  chips.innerHTML = top.map(r => `<span class="region-chip">${r}</span>`).join('');
+  chips.innerHTML = topRegionNames(data.activations, data.regions)
+    .map(r => `<span class="region-chip">${r}</span>`).join('');
   card.appendChild(chips);
 
-  return card;
+  return { card, cv, data };
 }
 
 (async () => {
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
-  const index = await loadIndex();
+
+  const index = await fetch('index.json').then(r => r.json());
+  const deferred = [];
+
   for (const meta of index) {
     let data = null;
-    try { data = await loadData(meta.data_file); } catch {}
-    grid.appendChild(renderCard(meta, data));
+    try { data = await fetch(meta.data_file).then(r => r.json()); } catch {}
+    const { card, cv, data: d } = buildCard(meta, data);
+    grid.appendChild(card);
+    if (cv && d) deferred.push({ cv, data: d });
   }
+
+  // render all heatmaps after layout is stable
+  requestAnimationFrame(() => {
+    for (const { cv, data } of deferred) {
+      const N_SHOW = 20;
+      const CELL_H = 14;
+      const W = cv.parentElement.clientWidth || 380;
+      const H = N_SHOW * CELL_H + 22;
+      cv.width = W;
+      cv.height = H;
+      cv.style.height = H + 'px';
+      renderHeatmap(cv, data.activations, data.regions);
+    }
+  });
 })();
 </script>
 </body>
